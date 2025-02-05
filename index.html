@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rich Text Editor with LaTeX Toolbar</title>
+    <title>Rich Text Editor with Fast Sync</title>
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.3/cdn.min.js"
       defer
@@ -20,9 +20,18 @@
         border: 1px solid #ddd;
         border-radius: 4px;
         margin-top: 20px;
+        display: flex;
+        gap: 20px;
+      }
+      .editor-panel {
+        flex: 1;
+        border: 1px solid #eee;
+        border-radius: 4px;
       }
       .button-container {
         margin: 20px 0;
+        display: flex;
+        gap: 10px;
       }
       .button {
         padding: 10px 20px;
@@ -31,117 +40,52 @@
         cursor: pointer;
         font-size: 16px;
         transition: background-color 0.3s;
-        margin-right: 10px;
+        background-color: #f0f0f0;
+        color: #333;
       }
-      .edit-button {
-        background-color: #4caf50;
-        color: white;
-      }
-      .preview-button {
+      .button.active {
         background-color: #2196f3;
-        color: white;
-      }
-      .html-button {
-        background-color: #ff9800;
-        color: white;
-      }
-      .latex-button {
-        background-color: #9c27b0;
         color: white;
       }
       .button:hover {
         opacity: 0.9;
       }
+      .html-editor {
+        width: 100%;
+        height: 500px;
+        font-family: monospace;
+        padding: 10px;
+        border: none;
+        resize: none;
+        background-color: #f8f8f8;
+        outline: none;
+      }
+      .html-editor:focus {
+        background-color: #fff;
+      }
       .preview-content {
         padding: 20px;
         min-height: 400px;
       }
-      .hidden {
-        display: none;
+      .latex-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
       }
-
-      /* Table styles */
-      .preview-content table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 10px 0;
-      }
-      .preview-content table td,
-      .preview-content table th {
-        border: 1px solid #ddd;
-        padding: 8px;
-      }
-      .preview-content table th {
-        background-color: #f2f2f2;
-      }
-
-      /* Modal styles */
       .modal-backdrop {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-      }
-      .modal {
-        background-color: white;
-        padding: 20px;
-        border-radius: 8px;
-        width: 80%;
-        max-width: 800px;
-        max-height: 80vh;
-        overflow-y: auto;
-      }
-      .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-      }
-      .modal-close {
-        background: none;
-        border: none;
-        font-size: 24px;
-        cursor: pointer;
-        padding: 0;
-        color: #666;
-      }
-      .html-content {
-        background-color: #f5f5f5;
-        padding: 15px;
-        border-radius: 4px;
-        white-space: pre-wrap;
-        font-family: monospace;
-        margin: 10px 0;
-      }
-      .copy-button {
-        background-color: #673ab7;
-        color: white;
-      }
-      .copy-success {
-        color: #4caf50;
-        margin-left: 10px;
-        display: inline-block;
-      }
-
-      /* LaTeX Editor Modal */
-      .latex-input {
-        width: 100%;
-        padding: 10px;
-        margin-bottom: 10px;
-        font-family: monospace;
-      }
-      .latex-preview {
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin: 10px 0;
-        min-height: 50px;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
       }
     </style>
   </head>
@@ -150,294 +94,207 @@
       <h1>Advanced Rich Text Editor</h1>
 
       <div class="button-container">
-        <button
-          class="button edit-button"
-          x-show="!isEditing"
-          @click="toggleEdit"
+        <button 
+          class="button" 
+          :class="{ 'active': viewMode === 'visual' }"
+          @click="setViewMode('visual')"
         >
-          Edit
+          Visual Editor
         </button>
-        <button
-          class="button preview-button"
-          x-show="isEditing"
-          @click="togglePreview"
+        <button 
+          class="button" 
+          :class="{ 'active': viewMode === 'html' }"
+          @click="setViewMode('html')"
+        >
+          HTML Editor
+        </button>
+        <button 
+          class="button" 
+          :class="{ 'active': viewMode === 'preview' }"
+          @click="setViewMode('preview')"
         >
           Preview
         </button>
-        <button class="button html-button" @click="showHtmlModal = true">
-          View HTML
+        <button 
+          class="button" 
+          :class="{ 'active': viewMode === 'split' }"
+          @click="setViewMode('split')"
+        >
+          Split View
         </button>
-        <button
+        <button 
           class="button latex-button"
-          x-show="isEditing"
+          x-show="viewMode !== 'preview'"
           @click="showLatexModal = true"
         >
           Insert LaTeX
         </button>
       </div>
 
-      <div class="editor-container">
-        <div x-show="isEditing">
+      <div class="editor-container" :style="viewMode === 'split' ? 'min-height: 500px' : ''">
+        <!-- Visual Editor Panel -->
+        <div class="editor-panel" x-show="['visual', 'split'].includes(viewMode)" :style="viewMode === 'split' ? 'width: 50%' : 'width: 100%'">
           <textarea id="editor" x-ref="editor"></textarea>
         </div>
 
-        <div
-          x-show="!isEditing"
-          class="preview-content"
-          x-html="content"
-          x-effect="if(!isEditing) { renderMathJax() }"
-        ></div>
-      </div>
+        <!-- HTML Editor Panel -->
+        <div class="editor-panel" x-show="['html', 'split'].includes(viewMode)" :style="viewMode === 'split' ? 'width: 50%' : 'width: 100%'">
+          <textarea 
+            class="html-editor" 
+            x-model="content"
+            @input.debounce.0="syncHtmlToVisual"
+            @keydown.enter.prevent="handleEnterKey"
+            placeholder="Enter HTML here..."
+          ></textarea>
+        </div>
 
-      <!-- HTML Modal -->
-      <div class="modal-backdrop" x-show="showHtmlModal" x-cloak>
-        <div class="modal" @click.outside="showHtmlModal = false">
-          <div class="modal-header">
-            <h2>HTML Code</h2>
-            <button class="modal-close" @click="showHtmlModal = false">
-              &times;
-            </button>
-          </div>
-          <div class="html-content" x-text="content"></div>
-          <button
-            class="button copy-button"
-            @click="copyHtml"
-            x-text="copyButtonText"
-          >
-            Copy HTML
-          </button>
-          <span class="copy-success" x-show="showCopySuccess">Copied!</span>
+        <!-- Preview Panel -->
+        <div class="editor-panel" x-show="viewMode === 'preview'">
+          <div 
+            class="preview-content"
+            x-html="content"
+            x-effect="if(viewMode === 'preview') { renderMathJax() }"
+          ></div>
         </div>
       </div>
 
       <!-- LaTeX Modal -->
-      <div class="modal-backdrop" x-show="showLatexModal" x-cloak>
-        <div class="modal" @click.outside="showLatexModal = false">
-          <div class="modal-header">
-            <h2>Insert LaTeX Formula</h2>
-            <button class="modal-close" @click="showLatexModal = false">
-              &times;
-            </button>
+      <template x-if="showLatexModal">
+        <div>
+          <div class="modal-backdrop" @click="showLatexModal = false"></div>
+          <div class="latex-modal">
+            <h3>Insert LaTeX Formula</h3>
+            <input
+              type="text"
+              x-model="latexInput"
+              @input="previewLatex"
+              placeholder="Enter LaTeX formula (e.g., \frac{1}{2})"
+              style="width: 100%; padding: 8px; margin: 10px 0;"
+            />
+            <div x-ref="latexPreview" style="min-height: 50px; border: 1px solid #ddd; padding: 10px; margin: 10px 0;"></div>
+            <button class="button" @click="insertLatex" style="margin-right: 10px;">Insert</button>
+            <button class="button" @click="showLatexModal = false">Cancel</button>
           </div>
-          <input
-            type="text"
-            class="latex-input"
-            x-model="latexInput"
-            placeholder="Enter LaTeX formula (e.g., \frac{1}{2})"
-            @input="previewLatex"
-          />
-          <div class="latex-preview" x-ref="latexPreview"></div>
-          <button class="button copy-button" @click="insertLatex">
-            Insert Formula
-          </button>
         </div>
-      </div>
+      </template>
     </div>
 
     <script>
       document.addEventListener("alpine:init", () => {
         Alpine.data("editor", () => ({
-          isEditing: true,
-          content:
-            "<h2>Welcome to the Rich Text Editor!</h2><p>Features include:</p><ul><li>Rich text editing</li><li>LaTeX support (try the new LaTeX button in the toolbar!)</li><li>Common math symbols and equations</li><li>Tables and more</li></ul>",
+          viewMode: 'visual',
+          content: "<h2>Welcome to the Rich Text Editor!</h2><p>Features include:</p><ul><li>Rich text editing</li><li>LaTeX support</li><li>Multiple view modes</li><li>Split screen editing</li></ul>",
           editor: null,
-          showHtmlModal: false,
           showLatexModal: false,
-          showCopySuccess: false,
-          copyButtonText: "Copy HTML",
           latexInput: "",
+          isUpdatingFromHtml: false,
+          lastUpdateTime: 0,
+          updateDelay: 50,
 
           init() {
             this.initTinyMCE();
           },
 
           initTinyMCE() {
-            // Define common LaTeX templates
-            const latexTemplates = [
-              {
-                text: "Fraction",
-                value: "\\frac{x}{y}",
-                preview: "\\[\\frac{x}{y}\\]",
-              },
-              {
-                text: "Square Root",
-                value: "\\sqrt{x}",
-                preview: "\\[\\sqrt{x}\\]",
-              },
-              {
-                text: "Summation",
-                value: "\\sum_{i=1}^{n} x_i",
-                preview: "\\[\\sum_{i=1}^{n} x_i\\]",
-              },
-              {
-                text: "Integral",
-                value: "\\int_{a}^{b} f(x) dx",
-                preview: "\\[\\int_{a}^{b} f(x) dx\\]",
-              },
-              {
-                text: "Matrix 2x2",
-                value: "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}",
-                preview:
-                  "\\[\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}\\]",
-              },
-              {
-                text: "Limit",
-                value: "\\lim_{x \\to \\infty} f(x)",
-                preview: "\\[\\lim_{x \\to \\infty} f(x)\\]",
-              },
-              {
-                text: "Greek Letters",
-                value: "\\alpha, \\beta, \\gamma, \\delta",
-                preview: "\\[\\alpha, \\beta, \\gamma, \\delta\\]",
-              },
-              {
-                text: "Custom Formula",
-                value: "custom",
-                preview: "Create your own formula",
-              },
-            ];
-
             tinymce.init({
               selector: "#editor",
-              height: 500,
+              height: this.viewMode === 'split' ? 440 : 500,
               menubar: true,
               plugins: [
-                "advlist",
-                "autolink",
-                "lists",
-                "link",
-                "image",
-                "charmap",
-                "preview",
-                "anchor",
-                "searchreplace",
-                "visualblocks",
-                "code",
-                "fullscreen",
-                "insertdatetime",
-                "media",
-                "table",
-                "help",
-                "wordcount",
+                "advlist", "autolink", "lists", "link", "image", "charmap",
+                "preview", "anchor", "searchreplace", "visualblocks",
+                "code", "fullscreen", "insertdatetime", "media", "table",
+                "help", "wordcount"
               ],
-              toolbar:
-                "undo redo | blocks | " +
-                "bold italic | alignleft aligncenter " +
-                "alignright alignjustify | bullist numlist outdent indent | " +
-                "table image latex | removeformat | help",
-              content_style:
-                "body { font-family:Helvetica,Arial,sans-serif; font-size:14px }",
+              toolbar: "undo redo | blocks | bold italic | alignleft aligncenter " +
+                      "alignright alignjustify | bullist numlist outdent indent | " +
+                      "table image | removeformat | help",
+              content_style: "body { font-family:Helvetica,Arial,sans-serif; font-size:14px }",
               setup: (editor) => {
                 this.editor = editor;
-
-                // Add custom LaTeX button
-                editor.ui.registry.addButton("latex", {
-                  text: "LaTeX",
-                  onAction: () => {
-                    editor.execCommand("mceLaTeX");
-                  },
-                });
-
-                // Add custom LaTeX command
-                editor.addCommand("mceLaTeX", () => {
-                  editor.windowManager.open({
-                    title: "Insert LaTeX Formula",
-                    body: {
-                      type: "panel",
-                      items: [
-                        {
-                          type: "selectbox",
-                          name: "template",
-                          label: "Choose template",
-                          items: latexTemplates.map((template) => ({
-                            text: template.text,
-                            value: template.value,
-                          })),
-                        },
-                        {
-                          type: "input",
-                          name: "formula",
-                          label: "LaTeX Formula",
-                        },
-                        {
-                          type: "htmlpanel",
-                          html: '<div id="latex-preview" class="latex-preview-container">Preview will appear here</div>',
-                        },
-                      ],
-                    },
-                    buttons: [
-                      {
-                        type: "cancel",
-                        text: "Close",
-                      },
-                      {
-                        type: "submit",
-                        text: "Insert",
-                        primary: true,
-                      },
-                    ],
-                    onSubmit: async (api) => {
-                      const data = api.getData();
-                      let formula = data.formula || data.template;
-
-                      // Insert the LaTeX formula
-                      const htmlFormula = `<span class="math-tex">\\[${formula}\\]</span>`;
-                      editor.insertContent(htmlFormula);
-
-                      // Close the window
-                      api.close();
-
-                      // Render the formula
-                      this.$nextTick(() => {
-                        MathJax.typesetPromise();
-                      });
-                    },
-                    onChange: (api) => {
-                      const data = api.getData();
-                      const preview = document.getElementById("latex-preview");
-                      if (preview) {
-                        const formula = data.formula || data.template;
-                        preview.innerHTML = `\\[${formula}\\]`;
-                        MathJax.typesetPromise([preview]);
-                      }
-                    },
-                  });
-                });
 
                 editor.on("init", () => {
                   editor.setContent(this.content);
                 });
 
+                editor.on("keydown", (e) => {
+                  if (e.key === "Enter") {
+                    e.stopPropagation();
+                  }
+                });
+
                 editor.on("change", () => {
-                  this.content = editor.getContent();
+                  if (!this.isUpdatingFromHtml) {
+                    const currentTime = Date.now();
+                    if (currentTime - this.lastUpdateTime > this.updateDelay) {
+                      this.lastUpdateTime = currentTime;
+                      requestAnimationFrame(() => {
+                        const newContent = editor.getContent();
+                        if (this.content !== newContent) {
+                          this.content = newContent;
+                        }
+                      });
+                    }
+                  }
                 });
               },
+              formats: {
+                removeformat: [
+                  {
+                    selector: '*',
+                    attributes: ['style', 'class'],
+                    split: false,
+                    expand: false,
+                    deep: true
+                  }
+                ]
+              },
+              forced_root_block: false,
+              force_br_newlines: true,
+              force_p_newlines: false,
             });
           },
 
-          togglePreview() {
-            this.content = this.editor.getContent();
-            this.isEditing = false;
-          },
-
-          toggleEdit() {
-            this.isEditing = true;
+          handleEnterKey(e) {
+            const textarea = e.target;
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            
+            const newContent = 
+              this.content.substring(0, start) + 
+              "\n" + 
+              this.content.substring(end);
+            
+            this.content = newContent;
+            
             this.$nextTick(() => {
-              this.editor.setContent(this.content);
+              textarea.selectionStart = textarea.selectionEnd = start + 1;
             });
+
+            this.syncHtmlToVisual();
           },
 
-          async copyHtml() {
-            try {
-              await navigator.clipboard.writeText(this.content);
-              this.showCopySuccess = true;
-              this.copyButtonText = "Copied!";
-              setTimeout(() => {
-                this.showCopySuccess = false;
-                this.copyButtonText = "Copy HTML";
-              }, 2000);
-            } catch (err) {
-              alert("Failed to copy HTML to clipboard");
+          syncHtmlToVisual() {
+            if (this.editor && !this.isUpdatingFromHtml) {
+              this.isUpdatingFromHtml = true;
+              requestAnimationFrame(() => {
+                const currentContent = this.editor.getContent();
+                if (currentContent !== this.content) {
+                  this.editor.setContent(this.content);
+                }
+                setTimeout(() => {
+                  this.isUpdatingFromHtml = false;
+                }, this.updateDelay);
+              });
+            }
+          },
+
+          setViewMode(mode) {
+            this.viewMode = mode;
+            if (mode === 'preview') {
+              this.$nextTick(() => {
+                this.renderMathJax();
+              });
             }
           },
 
@@ -449,7 +306,7 @@
           },
 
           insertLatex() {
-            if (this.latexInput) {
+            if (this.latexInput && this.editor) {
               const formula = `<span class="math-tex">\\[${this.latexInput}\\]</span>`;
               this.editor.insertContent(formula);
               this.showLatexModal = false;
@@ -461,7 +318,7 @@
             this.$nextTick(() => {
               MathJax.typesetPromise();
             });
-          },
+          }
         }));
       });
     </script>
