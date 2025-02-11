@@ -25,7 +25,7 @@ cd rich-text-editor-prototyping
 python -m http.server 8000
 ```
 
-Then open the provided URL (localhost:8080)
+Then open the provided URL (localhost:8000)
 
 ### 3️⃣ Run with Node.js
 To serve the project using Node.js:
